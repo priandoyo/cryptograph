@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cryptograph | Workshop Challenge</title>
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #101827;
+  color: #f1f5f9;
+}
+
+.container {
+  max-width: 900px;
+  margin: 40px auto;
+  padding: 20px;
+}
+
+header, .panel {
+  background: #1e293b;
+  padding: 24px;
+  border-radius: 14px;
+  margin-bottom: 20px;
+}
+
+header { padding: 30px; }
+header h1 { margin: 10px 0; }
+
+.muted { color: #94a3b8; }
+
+input {
+  width: 100%;
+  padding: 13px;
+  margin: 8px 0 16px;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  background: #0f172a;
+  color: white;
+}
+
+button {
+  background: #2563eb;
+  color: white;
+  padding: 13px 22px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 13px 10px;
+  text-align: left;
+  border-bottom: 1px solid #334155;
+  overflow-wrap: anywhere;
+}
+
+th { color: #93c5fd; }
+
+.status {
+  margin-top: 14px;
+  color: #86efac;
+}
+
+footer {
+  text-align: center;
+  padding: 20px;
+  color: #64748b;
+}
+
+@media(max-width:600px) {
+  .container { margin: 10px auto; }
+  .panel { padding: 15px; }
+  th, td { font-size: 12px; padding: 9px 5px; }
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<header>
+  <div class="muted">CRYPTOGRAPHY LAB / CHALLENGE 01</div>
+  <h1>Decrypt the Message</h1>
+  <p class="muted">
+    Solve the cryptography challenge using Python.
+    Submit your answer and see the live leaderboard.
+  </p>
+  <div id="capacity" class="muted">Loading workshop...</div>
+</header>
+
+<section class="panel">
+  <h2>Submit Your Answer</h2>
+
+  <form id="submissionForm">
+    <label for="name">Your name</label>
+    <input id="name" maxlength="100"
+      autocomplete="name"
+      placeholder="Enter your name" required>
+
+    <label for="answer">Decrypted message</label>
+    <input id="answer" maxlength="500"
+      placeholder="Enter your answer" required>
+
+    <button id="submitButton" type="submit">
+      Submit Answer
+    </button>
+  </form>
+
+  <div id="status" class="status" aria-live="polite"></div>
+</section>
+
+<section class="panel" id="leaderboardPanel">
+  <h2>Live Leaderboard</h2>
+  <p class="muted" id="count">Loading submissions...</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Answer</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody id="leaderboard"></tbody>
+  </table>
+</section>
+
+<footer>
+  Cryptograph | Powered by GitHub and Vercel
+</footer>
+
+</div>
+
+<script>
+const form = document.getElementById("submissionForm");
+const button = document.getElementById("submitButton");
+const statusBox = document.getElementById("status");
+
+function addCell(row, value) {
+  const cell = document.createElement("td");
+  cell.textContent = value;
+  row.appendChild(cell);
+}
+
+async function refresh() {
+  try {
+    const response = await fetch("/api/submissions", {
+      cache: "no-store"
+    });
+
+    if (!response.ok) throw new Error("Could not load data");
+
+    const data = await response.json();
+    const config = data.config;
+    const submissions = data.submissions;
+
+    document.getElementById("capacity").textContent =
+      `${config.workshop} | ${config.challenge} | ` +
+      `${submissions.length}/${config.max_submissions} submissions`;
+
+    document.getElementById("leaderboardPanel").hidden =
+      config.show_leaderboard === false;
+
+    const body = document.getElementById("leaderboard");
+    body.replaceChildren();
+
+    document.getElementById("count").textContent =
+      `${submissions.length} submissions received`;
+
+    submissions.forEach((item, index) => {
+      const row = document.createElement("tr");
+
+      addCell(row, index + 1);
+      addCell(row, item.name);
+      addCell(row, item.answer);
+      addCell(row, new Date(item.timestamp).toLocaleTimeString());
+
+      body.appendChild(row);
+    });
+
+    const canSubmit =
+      config.accept_submissions &&
+      submissions.length < config.max_submissions;
+
+    button.disabled = !canSubmit;
+
+    if (!config.accept_submissions) {
+      statusBox.textContent = "Submissions are closed.";
+    } else if (!canSubmit) {
+      statusBox.textContent = "Submission limit reached.";
+    }
+  } catch (error) {
+    statusBox.textContent = "Unable to refresh leaderboard.";
+  }
+}
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  button.disabled = true;
+  statusBox.textContent = "Submitting...";
+
+  try {
+    const response = await fetch("/api/submissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: document.getElementById("name").value.trim(),
+        answer: document.getElementById("answer").value.trim()
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Submission failed");
+    }
+
+    statusBox.textContent = "Submission received successfully!";
+    form.reset();
+    await refresh();
+
+  } catch (error) {
+    statusBox.textContent = error.message;
+    button.disabled = false;
+  }
+});
+
+refresh();
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>
