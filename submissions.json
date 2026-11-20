@@ -2,33 +2,8 @@
   "submissions": [
     {
       "id": 1,
-      "name": "anjar",
-      "answer": "test",
+      "name": "Anjar Priandoyo",
+      "answer": "Original Text",
       "timestamp": "2026-11-20T04:26:14.061Z"
-    },
-    {
-      "id": 2,
-      "name": "budi",
-      "answer": "wow",
-      "timestamp": "2026-11-20T04:26:24.289Z"
-    },
-    {
-      "id": 3,
-      "name": "qqq",
-      "answer": "111",
-      "timestamp": "2026-11-20T04:26:43.441Z"
-    },
-    {
-      "id": 4,
-      "name": "farhan",
-      "answer": "good",
-      "timestamp": "2026-11-20T04:30:12.859Z"
-    },
-    {
-      "id": 5,
-      "name": "new leaderboard",
-      "answer": "anjar",
-      "timestamp": "2026-11-20T04:34:55.511Z"
-    }
-  ]
+    } ]
 }
