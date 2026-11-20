@@ -1,4 +1,3 @@
-
 const OWNER = process.env.GITHUB_OWNER || "priandoyo";
 const REPO = process.env.GITHUB_REPO || "cryptograph";
 const BRANCH = process.env.GITHUB_BRANCH || "main";
@@ -6,6 +5,7 @@ const TOKEN = process.env.GITHUB_TOKEN;
 
 const API = "https://api.github.com";
 
+// GitHub API headers
 function githubHeaders() {
   return {
     Authorization: `Bearer ${TOKEN}`,
@@ -14,8 +14,7 @@ function githubHeaders() {
   };
 }
 
-// Read a public JSON file from GitHub.
-// Cache-busting helps retrieve the latest version.
+// Read public JSON files, such as config.json
 async function readPublicJSON(filename) {
   const url =
     `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${filename}?t=${Date.now()}`;
@@ -38,8 +37,8 @@ async function getConfig() {
   return readPublicJSON("config.json");
 }
 
-// Read submission archive and its GitHub SHA.
-// This function is used only when saving submissions.
+// Read submissions.json directly through GitHub Contents API
+// Returns both file SHA and submission data
 async function getArchive() {
   const url =
     `${API}/repos/${OWNER}/${REPO}/contents/submissions.json?ref=${BRANCH}`;
@@ -70,7 +69,7 @@ async function getArchive() {
   };
 }
 
-// Save updated submissions to GitHub
+// Save updated submissions.json to GitHub
 async function saveArchive(data, sha) {
   const url =
     `${API}/repos/${OWNER}/${REPO}/contents/submissions.json`;
@@ -109,29 +108,27 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Read workshop configuration
-    const config = await getConfig();
-
-    // GET: Display leaderboard
-    // No GitHub token required because the repository is public.
-    if (req.method === "GET") {
-      const archive = await readPublicJSON("submissions.json");
-
-      return res.status(200).json({
-        config,
-        submissions: archive.submissions || []
-      });
-    }
-
-    // POST: Save student submission
-    // A GitHub token is required for writing.
+    // GET and POST both require GitHub access
     if (!TOKEN) {
       return res.status(500).json({
         error: "GITHUB_TOKEN is not configured in Vercel."
       });
     }
 
-    // Parse request body
+    // Read workshop configuration
+    const config = await getConfig();
+
+    // GET: Return current leaderboard
+    if (req.method === "GET") {
+      const archive = await getArchive();
+
+      return res.status(200).json({
+        config,
+        submissions: archive.data.submissions || []
+      });
+    }
+
+    // POST: Receive student submission
     let body = req.body;
 
     if (typeof body === "string") {
@@ -159,7 +156,7 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Check whether submissions are open
+    // Check submission availability
     if (!config.accept_submissions) {
       return res.status(403).json({
         error: "Submissions are closed."
@@ -170,11 +167,15 @@ module.exports = async function handler(req, res) {
     const limit = Number(config.max_submissions);
 
     if (!Number.isInteger(limit) || limit < 1) {
-      throw new Error("Invalid max_submissions in config.json");
+      throw new Error(
+        "Invalid max_submissions in config.json"
+      );
     }
 
     // Retry if another participant updates the file concurrently
     for (let attempt = 0; attempt < 8; attempt++) {
+
+      // Read latest archive and SHA
       const archive = await getArchive();
       const submissions = archive.data.submissions || [];
 
@@ -193,7 +194,7 @@ module.exports = async function handler(req, res) {
         timestamp: new Date().toISOString()
       });
 
-      // Save to GitHub
+      // Save updated archive
       const result = await saveArchive(
         { submissions },
         archive.sha
@@ -202,11 +203,12 @@ module.exports = async function handler(req, res) {
       if (result.ok) {
         return res.status(201).json({
           success: true,
-          message: "Submission received."
+          message: "Submission received.",
+          total_submissions: submissions.length
         });
       }
 
-      // Read GitHub error details
+      // Capture GitHub error details
       const detail = await result.text();
 
       console.error(
@@ -215,31 +217,35 @@ module.exports = async function handler(req, res) {
         detail
       );
 
-      // Retry potential concurrent update conflicts
+      // Retry concurrent update conflicts
       if (result.status === 409) {
         continue;
       }
 
-      // Return useful error for other GitHub failures
       if (result.status === 403) {
         return res.status(502).json({
-          error: "GitHub permission denied. Check GITHUB_TOKEN permissions."
+          error:
+            "GitHub permission denied. Check GITHUB_TOKEN permissions."
         });
       }
 
       if (result.status === 422) {
         return res.status(502).json({
-          error: "GitHub rejected the update. Check repository, branch and file SHA."
+          error:
+            "GitHub rejected the update. Check repository, branch and file SHA."
         });
       }
 
       return res.status(502).json({
-        error: `GitHub update failed (${result.status}). Check Vercel runtime logs.`
+        error:
+          `GitHub update failed (${result.status}). Check Vercel runtime logs.`
       });
     }
 
+    // All retries exhausted
     return res.status(503).json({
-      error: "Too many simultaneous submissions. Please try again."
+      error:
+        "Too many simultaneous submissions. Please try again."
     });
 
   } catch (error) {
